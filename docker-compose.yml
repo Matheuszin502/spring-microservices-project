@@ -1,0 +1,111 @@
+services:
+  zipkin-server:
+    image: openzipkin/zipkin
+    ports:
+      - 9411:9411
+    restart: always
+    networks:
+      - matheus-network
+
+  naming-server:
+    image: 1matheus2/naming-server:0.0.1-SNAPSHOT
+    ports:
+      - 8761:8761
+    restart: always
+    depends_on:
+      - zipkin-server
+    networks:
+      - matheus-network
+
+  api-gateway:
+    image: 1matheus2/api-gateway:0.0.1-SNAPSHOT
+    ports:
+      - 8765:8765
+    restart: always
+    depends_on:
+      - zipkin-server
+      - naming-server
+    environment:
+      SPRING_ZIPKIN_BASEURL: http://zipkin-server:9411
+      EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE: http://naming-server:8761/eureka
+    networks:
+      - matheus-network
+
+  book-db:
+    image: mysql:9.3.0
+    ports:
+      - 3310:3306
+    restart: always
+    environment:
+      TZ: America/Sao_Paulo
+      # MYSQL_ROOT_PASSWORD: password
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      # MYSQL_USER: user
+      # MYSQL_PASSWORD: password
+      MYSQL_DATABASE: book_service
+    networks:
+      - matheus-network
+
+  exchange-db:
+    image: mysql:9.3.0
+    ports:
+      - 3308:3306
+    restart: always
+    environment:
+      TZ: America/Sao_Paulo
+      # MYSQL_ROOT_PASSWORD: password
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      # MYSQL_USER: user
+      # MYSQL_PASSWORD: password
+      MYSQL_DATABASE: exchange_service
+    networks:
+      - matheus-network
+
+  exchange-service:
+    image: 1matheus2/exchange-service
+    restart: always
+    build:
+      context: ./exchange-service
+      dockerfile: Dockerfile
+    depends_on:
+      - zipkin-server
+      - naming-server
+      - exchange-db
+    environment:
+      TZ: America/Sao_Paulo
+      SPRING_ZIPKIN_BASEURL: http://zipkin-server:9411
+      EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE: http://naming-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:mysql://exchange-db:3306/exchange_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&enabledTLSProtocols=TLSv1.2
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD:
+    ports:
+      - 8000:8000
+    networks:
+      - matheus-network
+
+  book-service:
+    image: 1matheus2/book-service
+    restart: always
+    build:
+      context: ./book-service
+      dockerfile: Dockerfile
+    depends_on:
+      - zipkin-server
+      - naming-server
+      - book-db
+    environment:
+      TZ: America/Sao_Paulo
+      SPRING_ZIPKIN_BASEURL: http://zipkin-server:9411
+      EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE: http://naming-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:mysql://book-db:3306/book_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&enabledTLSProtocols=TLSv1.2
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD:
+    ports:
+      - 8100:8100
+    networks:
+      - matheus-network
+
+networks:
+  matheus-network:
+    name: matheus-network
+    driver: bridge
